@@ -1,0 +1,126 @@
+---
+title: "Lab 7 Assignment: PCA in a Tidyverse Style"
+author: "Papachristakis Apostolos (s263513), Anastasia Baltzi (s253566)"
+date: today
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 2
+---
+
+```{r}
+#| label: setup
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(broom)
+```
+
+## Introduction & Dataset
+
+In this micro-report, we implement the tidy PCA workflow demonstrated by Claus O. Wilke. We use the standard `iris` morphological dataset (150 observations across 3 flower species: *setosa*, *versicolor*, and *virginica*) to illustrate scaling, principal component extraction, variance explained, and loading interpretation.
+
+```{r}
+#| label: load-data
+
+iris_clean <- iris |>
+  as_tibble()
+
+head(iris_clean)
+```
+
+## Running PCA
+
+Principal Component Analysis requires numeric variables. We scale features to unit variance so that differing measurement units do not skew the variance structure.
+
+```{r}
+#| label: run-pca
+
+pca_fit <- iris_clean |>
+  select(where(is.numeric)) |>
+  prcomp(scale. = TRUE)
+
+summary(pca_fit)
+```
+
+## Visualizing Principal Components (Score Plot)
+
+Using `broom::augment()`, we join the projected PC coordinates back with the metadata (`Species`).
+
+```{r}
+#| label: plot-pca
+#| fig-width: 6
+#| fig-height: 4
+
+pca_augmented <- pca_fit |>
+  augment(iris_clean)
+
+ggplot(pca_augmented, aes(x = .fittedPC1, y = .fittedPC2, color = Species)) +
+  geom_point(size = 2, alpha = 0.8) +
+  scale_color_brewer(palette = "Dark2") +
+  theme_minimal(base_size = 12) +
+  labs(
+    title = "PCA Score Plot of Iris Species",
+    x = "Principal Component 1",
+    y = "Principal Component 2"
+  )
+```
+
+*Observation:* PC1 cleanly distinguishes *Iris setosa* from *versicolor* and *virginica*, while PC2 separates *versicolor* from *virginica*.
+
+## Variance Explained (Scree Plot)
+
+We extract eigenvalues using `broom::tidy(..., matrix = "eigenvalues")` to assess the proportion of variance captured.
+
+```{r}
+#| label: plot-variance
+#| fig-width: 6
+#| fig-height: 3.5
+
+var_explained <- pca_fit |>
+  tidy(matrix = "eigenvalues")
+
+ggplot(var_explained, aes(x = PC, y = percent)) +
+  geom_col(fill = "steelblue", alpha = 0.85) +
+  scale_x_continuous(breaks = 1:4) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  theme_minimal(base_size = 12) +
+  labs(
+    title = "Variance Explained per Principal Component",
+    x = "Principal Component",
+    y = "Percentage of Variance"
+  )
+```
+
+PC1 accounts for ~73% of the variance, and PC1 + PC2 together account for over 95% of the total dataset variance.
+
+## Feature Loadings (Rotation Matrix)
+
+We inspect the rotation matrix via `broom::tidy(..., matrix = "rotation")` to observe which morphological traits drive each axis.
+
+```{r}
+#| label: plot-loadings
+#| fig-width: 7
+#| fig-height: 4
+
+loadings <- pca_fit |>
+  tidy(matrix = "rotation")
+
+ggplot(loadings, aes(x = value, y = column, fill = column)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(vars(PC), scales = "free_x") +
+  theme_minimal(base_size = 11) +
+  labs(
+    title = "Variable Loadings across Principal Components",
+    x = "Loading Weight",
+    y = "Feature"
+  )
+```
+
+Petal length and petal width exhibit large positive weights along PC1, explaining why species with larger petals cluster toward positive PC1 coordinates.
+
+## Summary
+
+Combining `prcomp()` with `broom::tidy()` and `broom::augment()` creates a clean, readable pipeline that fits directly into the tidyverse ecosystem without manual matrix slicing.
